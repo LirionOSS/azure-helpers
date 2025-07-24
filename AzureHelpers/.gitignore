@@ -1,0 +1,9 @@
+./*
+!./AzureHelpers.psd1
+!./AzureHelpers.psm1
+!./LICENSE.md
+!./.gitignore
+!./en-US/about_AzureHelpers.help.txt
+!./Private/vars.ps1.example
+!./Public/*.ps1
+!./Tests/AzureHelpers.Tests

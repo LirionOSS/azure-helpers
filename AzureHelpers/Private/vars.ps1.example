@@ -1,0 +1,46 @@
+#!powershell
+# vim:syntax=ps1:ts=4
+<#
+.SYNOPSIS
+
+Define variables for the functions defined mainly in /public
+
+.OUTPUTS
+
+[Hashtable]$tenantMap Maps desired names to a subscription's tenant UUID
+
+[Hashtable]$subscrMap Maps desired names to a subscription's own UUID
+#>
+# For now, we have to do these manually.
+# For every subscription you want to use with Login-AzSubscription,
+# add the name in the enum and the tenant UUID in the tenant map as well
+# as the subscription UUID in the subscription map.
+# Here, you do it once. Better than every time you switch subscriptions :-)
+
+
+# NOT USED ANYMORE. The validation we can do through this is outweighed by
+# users having to populate only simple variables below. Plus, we have to
+# check whether the maps contain the key in any case and do that already.
+# The enum would make more sense in case of a centralised output, which is why
+# we keep this commented out.
+# # The names you want to use for the subscriptions. Does not have to match the
+# # actual names in Azure - use simplified names if you like to.
+# Add-Type -TypeDefinition @"
+# public enum azSubscriptions {
+	# common,
+	# customer1
+	# }
+# "@
+
+# The tenants that the subscriptions have been created in. Again, use whatever
+# name - the UUIDs are important.
+$tenantMap = @{
+	'common' = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+	'customer1' = 'yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy'
+}
+
+# The subscription UUIDs themselves. Again, only the UUIDs must match Azure.
+$subscrMap = @{
+	'common' = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+	'customer1' = 'yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy'
+}
