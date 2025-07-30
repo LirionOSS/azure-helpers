@@ -19,6 +19,10 @@ function Start-AzureVm {
 	.OUTPUTS
 	String. Status messages and the actual AzureCLI outputs.
 	#>
+	[Alias(
+		'azvmstart',
+		'azvmb',
+	)]
 	Param (
 		[Parameter(
 			Mandatory=$true,
