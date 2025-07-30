@@ -1,4 +1,4 @@
-function Stop-AzVm {
+function Stop-AzureVm {
 	# Supply a VM name (or an unambiguous part of it), stop, and deallocate the machine.
 	<#
 	.SYNOPSIS

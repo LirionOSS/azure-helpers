@@ -1,4 +1,4 @@
-function Start-AzVm {
+function Start-AzureVm {
 	# Supply a VM name (or an unambiguous part of it) and start the machine.
 	<#
 	.SYNOPSIS
