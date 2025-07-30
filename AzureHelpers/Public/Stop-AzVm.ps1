@@ -13,7 +13,7 @@ function Stop-AzVm {
 	be billed for machines we stop, the latter requiring two actual commands.
 	
 	.INPUTS
-	String. The name or unambiguous part of the name of the VM we intend to
+	String. The names or unambiguous parts of the names of the VMs we intend to
 	stop and deallocate.
 	
 	.OUTPUTS
@@ -28,30 +28,57 @@ function Stop-AzVm {
 		[Parameter(
 			Mandatory=$true,
 			ValueFromPipelineByPropertyName=$true,
-			HelpMessage="String that is a VM name or is part of one unambiguous VM",
+			HelpMessage="Strings that are VM names or are part of single unambiguous VMs",
 			Position=0
 			)
 		]
 		[ValidateLength(1,64)]
-		[string]
-        $VmName
+		[string[]]
+		$VmName
 	)
 	$ErrorActionPreference = 'Stop'
-	$myvm = azvmidentify -VmName $VmName
-	# Since az vm stop is taking quite its time even when the machine is started, we should check ourselves whether the machine is running:
-	$myPowerState = (az vm show -d -g $myvm.resourceGroup -n $myvm.name -o json | ConvertFrom-Json).powerState
-	if ( ($myPowerState -match '(stopped|deallocated)$') ) {
-		Write-Host "VM $($myvm.name) (RG: $($myvm.resourceGroup)) is already stopped."
-	} else {
-		Write-Host "Stopping $($myvm.name) (RG: $($myvm.resourceGroup)):"
-		az vm stop -g $myvm.resourceGroup -n $myvm.name
-		Write-Host "...done."
+	$stopVms = @()
+	$deallocVms = @()
+	Write-Host "Checking state of VM(s)..."
+	foreach ($singlevm in $VmName) {
+		$myvm = azvmidentify -VmName $singlevm
+		# Since az vm stop is taking quite its time even when the machine is started, we should check ourselves whether the machine is running:
+		$myPowerState = (az vm show -d -g $myvm.resourceGroup -n $myvm.name -o json | ConvertFrom-Json).powerState
+		if ( ($myPowerState -match 'stopped$') ) {
+			Write-Host "VM $($myvm.name) (RG: $($myvm.resourceGroup)) is already stopped."
+			$deallocVms += $myvm
+		} else {
+			if ( ($myPowerState -match 'deallocated$') ) {
+				Write-Host "VM $($myvm.name) (RG: $($myvm.resourceGroup)) is already deallocated."
+			} else {
+				$stopVms += $myvm
+				$deallocVms += $myvm
+			}
+		}
 	}
-	if ( ($myPowerState -match 'deallocated$') ) {
-		Write-Host "VM $($myvm.name) (RG: $($myvm.resourceGroup)) is already deallocated."
-	} else {
-		Write-Host "Deallocating $($myvm.name) (RG: $($myvm.resourceGroup)):"
-		az vm deallocate -g $myvm.resourceGroup -n $myvm.name
-		Write-Host "...done."
-	}
+	Write-Host "Stopping $($stopVms.Count) machine(s)..."
+	$jobs = (
+		$stopVms | ForEach-Object {
+			# Write-Host "Starting $($_.name) (RG: $($_.resourceGroup)):"
+			$myvm = $_
+			Start-ThreadJob -ScriptBlock {
+				$this = $using:myvm
+				# Write-Host "Stopping $($myvm.name) (RG: $($myvm.resourceGroup)):"
+				az vm stop --output jsonc --resource-group $($this.resourceGroup) --name $($this.name)
+				# Write-Host "...done."
+			}
+		}
+	)
+	$jobs | Receive-Job -Wait -AutoRemoveJob
+	Write-Host "Deallocating $($deallocVms.Count) machine(s)..."
+	$jobs = (
+		$deallocVms | ForEach-Object {
+			$myvm = $_
+			Start-ThreadJob -ScriptBlock {
+				$this = $using:myvm
+				az vm deallocate --output jsonc --resource-group $($this.resourceGroup) --name $($this.name)
+			}
+		}
+	)
+	$jobs | Receive-Job -Wait -AutoRemoveJob
 }
