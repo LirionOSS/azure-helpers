@@ -45,11 +45,11 @@ function Stop-AzureVm {
 		# Since az vm stop is taking quite its time even when the machine is started, we should check ourselves whether the machine is running:
 		$myPowerState = (az vm show -d -g $myvm.resourceGroup -n $myvm.name -o json | ConvertFrom-Json).powerState
 		if ( ($myPowerState -match 'stopped$') ) {
-			Write-Host "VM $($myvm.name) (RG: $($myvm.resourceGroup)) is already stopped."
+			Write-Verbose "VM $($myvm.name) (RG: $($myvm.resourceGroup)) is already stopped."
 			$deallocVms += $myvm
 		} else {
 			if ( ($myPowerState -match 'deallocated$') ) {
-				Write-Host "VM $($myvm.name) (RG: $($myvm.resourceGroup)) is already deallocated."
+				Write-Verbose "VM $($myvm.name) (RG: $($myvm.resourceGroup)) is already deallocated."
 			} else {
 				$stopVms += $myvm
 				$deallocVms += $myvm
@@ -59,13 +59,28 @@ function Stop-AzureVm {
 	Write-Host "Stopping $($stopVms.Count) machine(s)..."
 	$jobs = (
 		$stopVms | ForEach-Object {
-			# Write-Host "Starting $($_.name) (RG: $($_.resourceGroup)):"
 			$myvm = $_
+			Write-Verbose "Triggering stop of $($myvm.name) (RG: $($myvm.resourceGroup))..."
 			Start-ThreadJob -ScriptBlock {
 				$this = $using:myvm
-				# Write-Host "Stopping $($myvm.name) (RG: $($myvm.resourceGroup)):"
-				az vm stop --output jsonc --resource-group $($this.resourceGroup) --name $($this.name)
-				# Write-Host "...done."
+				Write-Verbose "DEBUG: Threaded job got VM $($this.name) (RG: $($this.resourceGroup))..."
+				# Sometimes az vm stop bugs out (it's Microsoft _and_ Azure, no surprises here) - so
+				# for this command, we ignore errors %-) (read: do still complain, but continue).
+				# Also, maybe it's not AzureCLI entirely:
+				# "When an application prints to standard error, PowerShell will sometimes conclude that
+				# application has failed. This is actually a design decision made by PowerShell developers.
+				# IMHO, this is a mistake, because many reliable applications (such as curl) print useful
+				# information to standard error in the course of normal operation. The consequence is that
+				# PowerShell only plays well with other PowerShell scripts and can't be relied on to
+				# interoperate with other applications. (https://stackoverflow.com/a/11826589)
+				# Point of notice: it might be the warning(!) issued by az vm stop about a necessary deallocation.
+				# POWERSHELL IS SO WELL DEVELOPED [1001]
+				# Let's do both - Error handling and redirecting stderr to stdout. PS is chaos, face it with chaos.
+				# TODO: Maybe the ErrorActionPreference has to be around the $jobs call? (Still due to
+				# the reasons mentioned above.)
+				$ErrorActionPreference = 'Continue'
+				az vm stop --output jsonc --resource-group $($this.resourceGroup) --name $($this.name) 2>&1
+				$ErrorActionPreference = 'Stop'
 			}
 		}
 	)
@@ -74,11 +89,14 @@ function Stop-AzureVm {
 	$jobs = (
 		$deallocVms | ForEach-Object {
 			$myvm = $_
+			Write-Verbose "Triggering deallocation of $($myvm.name) (RG: $($myvm.resourceGroup))..."
 			Start-ThreadJob -ScriptBlock {
 				$this = $using:myvm
+				Write-Verbose "DEBUG: Threaded job got VM $($this.name) (RG: $($this.resourceGroup))..."
 				az vm deallocate --output jsonc --resource-group $($this.resourceGroup) --name $($this.name)
 			}
 		}
 	)
 	$jobs | Receive-Job -Wait -AutoRemoveJob
+	Write-Host "...everything done."
 }
