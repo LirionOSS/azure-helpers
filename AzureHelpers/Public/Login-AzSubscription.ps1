@@ -40,7 +40,7 @@ function Login-AzSubscription {
 		[ValidateLength(1,64)]
 		[string]
 		# [azSubscriptions]
-        $subscrName
+		$subscrName
 		# $subscrEnum
 	)
 	# # Since PowerShell Enum doesn't give a fuck about sub-types, we better cast to string here.
@@ -77,6 +77,7 @@ function Login-AzSubscription {
 		$throwstr += ")"
 		throw [System.ArgumentException]::New($throwstr)
 	}
+	$loggedout = $false
 	if ( ((az account list --only-show-errors -o json) | ConvertFrom-Json).Count -ne 0 ) {
 		Write-Host "Already logged in to an Azure subscription."
 		# For some very odd reason (bad coding in PS?* :-) ), this output would appear LAST. meaning after the last call of the function. (wtf?)
@@ -88,20 +89,23 @@ function Login-AzSubscription {
 		# on some output to interpret. Morons. We hence just try to assign a variable to this command, and if the variable is empty, tadaaa error. Lel.
 		#   * no, seriously, try "az something". "something" is unknown, and even then there is no darn exception**, just red text. No try/catch possible. Hilarious.
 		#   ** Even better, "az something" does not complain about "-ErrorAction", it simply ignores it in this case. Absolute pros at work :D ("az account" at least states it does not adhere to that...)
-		$mytok = (az account get-access-token -o json 2>$null | ConvertFrom-Json )
-		if ( $mytok -eq $null ) {
+		$mytok = (az account get-access-token -o json --query '{expiresOn: expiresOn, expires_on: expires_on}' 2>$null | ConvertFrom-Json )
+		try {
+			$attempt = [string]$mytok['expiresOn']
+			Clear-Variable -name attempt
+			# Do not have sensitive data lingering about:
+			Clear-Variable mytok
+			# Set subscription:
+			Write-Host "Setting active subscription to $($suuid)...`n"
+			az account set -o jsonc --subscription $suuid
+		} catch {
 			[Console]::ForegroundColor = 'red'
 			Write-Host "Token possibly invalid, AzureCLI has no means of renewing tokens (sic),"
 			Write-Host "hence logging you out."
 			[Console]::ResetColor()
 			az logout
 			Write-Host "...done. Please log in again."
-		} else {
-			# Do not have sensitive data lingering about:
-			Clear-Variable mytok
-			# Set subscription:
-			Write-Host "Setting active subscription to $($suuid)...`n"
-			az account set -o jsonc --subscription $suuid
+			$loggedout = $true
 		}
 	} else {
 		$loginex = $("" | Out-String)
@@ -131,8 +135,10 @@ function Login-AzSubscription {
 			throw [System.ArgumentNullException]::New("UUID for tenant not found: $SubscrName")
 		}
 	}
-	Write-Host "Access token:"
-	az account get-access-token -o jsonc --query '{expiresOn: expiresOn, expires_on: expires_on, subscription: subscription, tenant: tenant, tokenType: tokenType}'
-	Write-Host "Active subscription:"
-	az account show -o jsonc --query '{name: name, id: id, tenantId: tenantId, user: user}'
+	if ( -not $loggedout ) {
+		Write-Host "Access token:"
+		az account get-access-token -o jsonc --query '{expiresOn: expiresOn, expires_on: expires_on, subscription: subscription, tenant: tenant, tokenType: tokenType}'
+		Write-Host "Active subscription:"
+		az account show -o jsonc --query '{name: name, id: id, tenantId: tenantId, user: user}'
+	}
 }
